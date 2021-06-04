@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM quay.io/bitnami/golang:1.16 as builder
+FROM --platform=$TARGETPLATFORM quay.io/bitnami/golang:1.16 as builder
 
 ARG TARGETARCH
 ARG GIT_HEAD_COMMIT
@@ -32,7 +32,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH GO111MODULE=on go build \
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM --platform=$TARGETPLATFORM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER nonroot:nonroot
