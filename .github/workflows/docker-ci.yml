@@ -2,8 +2,8 @@ name: docker-ci
 
 on:
   push:
-    branches:
-      - multiarch
+    tags:        
+      - '*'
 
 jobs:
   docker-ci:
@@ -13,6 +13,18 @@ jobs:
       -
         name: Checkout
         uses: actions/checkout@v2
+
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: |
+            quay.io/ptx96/capsule
+          tags: |
+            type=semver,pattern={{raw}}
+          flavor: |
+            latest=false
 
       -
         name: Set up QEMU
@@ -54,8 +66,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm
           push: true
-          tags: |
-            quay.io/ptx96/capsule:latest
+          tags: ${{ steps.meta.outputs.tags }}
 
       -
         name: Image digest
