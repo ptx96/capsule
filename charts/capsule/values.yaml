@@ -33,7 +33,7 @@ manager:
       memory: 128Mi
 jobs:
   image:
-    repository: ptx96/kubectl
+    repository: quay.io/clastix/kubectl
     pullPolicy: IfNotPresent
     tag: "v1.20.7"
 mutatingWebhooksTimeoutSeconds: 30

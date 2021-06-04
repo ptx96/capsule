@@ -6,7 +6,7 @@ on:
       - multiarch
 
 jobs:
-  buildx_push:
+  docker-ci:
     runs-on: ubuntu-20.04
     steps:
 
