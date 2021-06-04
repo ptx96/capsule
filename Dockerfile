@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM quay.io/bitnami/golang:1.16 as builder
+FROM golang:1.16 as builder
 
 ARG TARGETARCH
 ARG GIT_HEAD_COMMIT
