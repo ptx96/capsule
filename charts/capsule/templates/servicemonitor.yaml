@@ -1,23 +1,26 @@
 {{- if .Values.serviceMonitor.enabled }}
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  labels:
-    {{- include "capsule.labels" . | nindent 4 }}
-    {{- .Values.serviceMonitor.labels | toYaml | nindent 4 }}
   name: {{ include "capsule.fullname" . }}-monitor
-  namespace: {{ .Values.serviceMonitor.namespace | default .Release.Namespace }}
+  {{- if .Values.serviceMonitor.namespace }}
+  namespace: {{ .Values.serviceMonitor.namespace }}
+  {{- end }}
+  labels:
+    {{- if .Values.serviceMonitor.labels }}
+    {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
+    {{- end }}
 spec:
   endpoints:
-    - interval: 15s
-      path: /metrics
-      port: metrics
-  jobLabel: app.kubernetes.io/name
+  - interval: 15s
+    port: metrics
+    path: /metrics
+  jobLabel: "{{ .Release.Name }}"
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
   namespaceSelector:
     matchNames:
       - {{ .Release.Namespace }}
-  selector:
-    matchLabels:
-      {{- include "capsule.labels" . | nindent 4 }}
-      {{- .Values.serviceMonitor.matchLabels | toYaml | nindent 6 }}
 {{- end }}
