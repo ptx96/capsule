@@ -3,7 +3,10 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   labels:
-    control-plane: controller-manager
+    {{- include "capsule.labels" . | nindent 4 }}
+    {{- if .Values.serviceMonitor.labels }}
+    {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
+    {{- end }}
   name: {{ include "capsule.fullname" . }}-metrics-role
   namespace: {{ .Values.serviceMonitor.namespace | default .Release.Namespace }}
 rules:
@@ -38,7 +41,10 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
-    control-plane: controller-manager
+    {{- include "capsule.labels" . | nindent 4 }}
+    {{- if .Values.serviceMonitor.labels }}
+    {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
+    {{- end }}
   name: {{ include "capsule.fullname" . }}-metrics-rolebinding
   namespace: {{ .Values.serviceMonitor.namespace | default .Release.Namespace }}
 roleRef:
