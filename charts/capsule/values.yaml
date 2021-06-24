@@ -65,3 +65,6 @@ serviceMonitor:
   labels: {}
   annotations: {}
   matchLabels: {}
+  serviceAccount:
+    name: capsule
+    namespace: capsule-system

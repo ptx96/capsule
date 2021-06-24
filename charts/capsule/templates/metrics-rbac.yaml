@@ -53,6 +53,6 @@ roleRef:
   name: {{ include "capsule.fullname" . }}-metrics-role
 subjects:
 - kind: ServiceAccount
-  name: prometheus-k8s
-  namespace: monitoring
+  name: {{ .Values.serviceMonitor.serviceAccount.name }}
+  namespace: {{ .Values.serviceMonitor.serviceAccount.namespace | default .Release.Namespace }}
 {{- end }}
