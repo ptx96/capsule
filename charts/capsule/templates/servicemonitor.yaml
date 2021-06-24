@@ -8,6 +8,7 @@ metadata:
   namespace: {{ .Values.serviceMonitor.namespace }}
   {{- end }}
   labels:
+    {{- include "capsule.labels" . | nindent 4 }}
     {{- if .Values.serviceMonitor.labels }}
     {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
     {{- end }}
@@ -18,8 +19,7 @@ spec:
     path: /metrics
   jobLabel: "{{ .Release.Name }}"
   selector:
-    matchLabels:
-      release: "{{ .Release.Name }}"
+    matchLabels: {{ include "capsule.labels" . | nindent 6 }}
   namespaceSelector:
     matchNames:
       - {{ .Release.Namespace }}
