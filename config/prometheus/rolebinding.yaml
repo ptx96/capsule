@@ -11,5 +11,5 @@ roleRef:
   name: capsule-metrics-role
 subjects:
 - kind: ServiceAccount
-  name: prometheus-k8s
-  namespace: monitoring
+  name: capsule
+  namespace: capsule-system
