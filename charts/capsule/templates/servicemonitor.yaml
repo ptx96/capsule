@@ -4,7 +4,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ include "capsule.fullname" . }}-monitor
-  namespace: {{ .Values.serviceMonitor.namespace | default .Release.Namespacce }}
+  namespace: {{ .Values.serviceMonitor.namespace | default .Release.Namespace }}
   labels:
     {{- include "capsule.labels" . | nindent 4 }}
     {{- if .Values.serviceMonitor.labels }}
