@@ -1,4 +1,3 @@
-
 <p align="left">
   <img src="https://img.shields.io/github/license/clastix/capsule"/>
   <img src="https://img.shields.io/github/go-mod/go-version/clastix/capsule"/>
@@ -13,7 +12,12 @@
 
 ---
 
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fptx96%2Fcapsule.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fptx96%2Fcapsule?ref=badge_large)
+
 # Kubernetes multi-tenancy made easy
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fptx96%2Fcapsule.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fptx96%2Fcapsule?ref=badge_shield)
+
 **Capsule** helps to implement a multi-tenancy and policy-based environment in your Kubernetes cluster. It is not intended to be yet another _PaaS_, instead, it has been designed as a micro-services-based ecosystem with the minimalist approach, leveraging only on upstream Kubernetes.
 
 # What's the problem with the current status?
@@ -179,4 +183,4 @@ $ make remove
 
 - Q. Do you provide commercial support?
 
-  A. Yes, we're available to help and provide commercial support. [Clastix](https://clastix.io) is the company behind Capsule. Please, contact us for a quote. 
+  A. Yes, we're available to help and provide commercial support. [Clastix](https://clastix.io) is the company behind Capsule. Please, contact us for a quote.
