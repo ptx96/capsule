@@ -22,9 +22,11 @@ bin
 *.swp
 *.swo
 *~
+.vscode
 
 **/*.kubeconfig
 **/*.crt
 **/*.key
 .DS_Store
-
+*.tgz
+kind.yaml

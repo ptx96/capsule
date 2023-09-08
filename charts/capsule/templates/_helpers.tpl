@@ -65,7 +65,6 @@ ServiceAccount annotations
 {{- end }}
 {{- end }}
 
-
 {{/*
 Create the name of the service account to use
 */}}
@@ -92,29 +91,37 @@ Create the proxy fully-qualified Docker image to use
 {{- end }}
 
 {{/*
+Determine the Kubernetes version to use for jobsFullyQualifiedDockerImage tag
+*/}}
+{{- define "capsule.jobsTagKubeVersion" -}}
+{{- if contains "-eks-" .Capabilities.KubeVersion.GitVersion }}
+{{- print "v" .Capabilities.KubeVersion.Major "." (.Capabilities.KubeVersion.Minor | replace "+" "") -}}
+{{- else }}
+{{- print "v" .Capabilities.KubeVersion.Major "." .Capabilities.KubeVersion.Minor -}}
+{{- end }}
+{{- end }}
+
+{{/*
 Create the jobs fully-qualified Docker image to use
 */}}
 {{- define "capsule.jobsFullyQualifiedDockerImage" -}}
+{{- if .Values.jobs.image.tag }}
 {{- printf "%s:%s" .Values.jobs.image.repository .Values.jobs.image.tag -}}
+{{- else }}
+{{- printf "%s:%s" .Values.jobs.image.repository (include "capsule.jobsTagKubeVersion" .) -}}
+{{- end }}
 {{- end }}
 
 {{/*
-Create the Capsule Deployment name to use
+Create the Capsule controller name to use
 */}}
-{{- define "capsule.deploymentName" -}}
+{{- define "capsule.controllerName" -}}
 {{- printf "%s-controller-manager" (include "capsule.fullname" .) -}}
-{{- end }}
-
-{{/*
-Create the Capsule CA Secret name to use
-*/}}
-{{- define "capsule.secretCaName" -}}
-{{- printf "%s-ca" (include "capsule.fullname" .) -}}
 {{- end }}
 
 {{/*
 Create the Capsule TLS Secret name to use
 */}}
 {{- define "capsule.secretTlsName" -}}
-{{- printf "%s-tls" (include "capsule.fullname" .) -}}
+{{ default ( printf "%s-tls" ( include "capsule.fullname" . ) ) .Values.tls.name }}
 {{- end }}

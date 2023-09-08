@@ -4,8 +4,11 @@ metadata:
   name: {{ include "capsule.fullname" . }}-validating-webhook-configuration
   labels:
     {{- include "capsule.labels" . | nindent 4 }}
-  {{- with .Values.customAnnotations }}
   annotations:
+  {{- if .Values.certManager.generateCertificates }}
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "capsule.fullname" . }}-webhook-cert
+  {{-  end }}
+  {{- with .Values.customAnnotations }}
     {{- toYaml . | nindent 4 }}
   {{- end }}
 webhooks:
@@ -13,7 +16,9 @@ webhooks:
     - v1
     - v1beta1
   clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
     caBundle: Cg==
+{{- end }}
     service:
       name: {{ include "capsule.fullname" . }}-webhook-service
       namespace: {{ .Release.Namespace }}
@@ -23,7 +28,7 @@ webhooks:
   matchPolicy: Equivalent
   name: cordoning.tenant.capsule.clastix.io
   namespaceSelector:
-    {{- toYaml .Values.webhooks.cordoning.namespaceSelector | nindent 4}}
+  {{- toYaml .Values.webhooks.cordoning.namespaceSelector | nindent 4}}
   objectSelector: {}
   rules:
     - apiGroups:
@@ -43,7 +48,9 @@ webhooks:
     - v1
     - v1beta1
   clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
     caBundle: Cg==
+{{- end }}
     service:
       name: {{ include "capsule.fullname" . }}-webhook-service
       namespace: {{ .Release.Namespace }}
@@ -53,10 +60,7 @@ webhooks:
   matchPolicy: Equivalent
   name: ingress.capsule.clastix.io
   namespaceSelector:
-    {{- toYaml .Values.webhooks.ingresses.namespaceSelector | nindent 4}}
-    matchExpressions:
-      - key: capsule.clastix.io/tenant
-        operator: Exists
+  {{- toYaml .Values.webhooks.ingresses.namespaceSelector | nindent 4}}
   objectSelector: {}
   rules:
     - apiGroups:
@@ -77,7 +81,9 @@ webhooks:
     - v1
     - v1beta1
   clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
     caBundle: Cg==
+{{- end }}
     service:
       name: {{ include "capsule.fullname" . }}-webhook-service
       namespace: {{ .Release.Namespace }}
@@ -106,7 +112,9 @@ webhooks:
     - v1
     - v1beta1
   clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
     caBundle: Cg==
+{{- end }}
     service:
       name: {{ include "capsule.fullname" . }}-webhook-service
       namespace: {{ .Release.Namespace }}
@@ -135,7 +143,37 @@ webhooks:
     - v1
     - v1beta1
   clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
     caBundle: Cg==
+{{- end }}
+    service:
+      name: {{ include "capsule.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /nodes
+      port: 443
+  failurePolicy: {{ .Values.webhooks.nodes.failurePolicy }}
+  name: nodes.capsule.clastix.io
+  matchPolicy: Exact
+  namespaceSelector: {}
+  objectSelector: {}
+  rules:
+    - apiGroups:
+        - ""
+      apiVersions:
+        - v1
+      operations:
+        - UPDATE
+      resources:
+        - nodes
+  sideEffects: None
+  timeoutSeconds: {{ .Values.validatingWebhooksTimeoutSeconds }}
+- admissionReviewVersions:
+    - v1
+    - v1beta1
+  clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
+    caBundle: Cg==
+{{- end }}
     service:
       name: {{ include "capsule.fullname" . }}-webhook-service
       namespace: {{ .Release.Namespace }}
@@ -154,6 +192,7 @@ webhooks:
         - v1
       operations:
         - CREATE
+        - UPDATE
       resources:
         - pods
       scope: Namespaced
@@ -163,10 +202,12 @@ webhooks:
     - v1
     - v1beta1
   clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
     caBundle: Cg==
+{{- end }}
     service:
       name: {{ include "capsule.fullname" . }}-webhook-service
-      namespace: capsule-system
+      namespace: {{ .Release.Namespace }}
       path: /persistentvolumeclaims
   failurePolicy: {{ .Values.webhooks.persistentvolumeclaims.failurePolicy }}
   name: pvc.capsule.clastix.io
@@ -189,7 +230,9 @@ webhooks:
     - v1
     - v1beta1
   clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
     caBundle: Cg==
+{{- end }}
     service:
       name: {{ include "capsule.fullname" . }}-webhook-service
       namespace: {{ .Release.Namespace }}
@@ -216,9 +259,43 @@ webhooks:
   timeoutSeconds: {{ .Values.validatingWebhooksTimeoutSeconds }}
 - admissionReviewVersions:
     - v1
+  clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
+    caBundle: Cg==
+{{- end }}
+    service:
+      name: capsule-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /tenantresource-objects
+  failurePolicy:  {{ .Values.webhooks.tenantResourceObjects.failurePolicy }}
+  name: resource-objects.tenant.capsule.clastix.io
+  namespaceSelector:
+    matchExpressions:
+      - key: capsule.clastix.io/tenant
+        operator: Exists
+  objectSelector:
+    matchExpressions:
+      - key: capsule.clastix.io/resources
+        operator: Exists
+  rules:
+    - apiGroups:
+        - '*'
+      apiVersions:
+        - '*'
+      operations:
+        - UPDATE
+        - DELETE
+      resources:
+        - '*'
+      scope: Namespaced
+  sideEffects: None
+- admissionReviewVersions:
+    - v1
     - v1beta1
   clientConfig:
+{{- if not .Values.certManager.generateCertificates }}
     caBundle: Cg==
+{{- end }}
     service:
       name: {{ include "capsule.fullname" . }}-webhook-service
       namespace: {{ .Release.Namespace }}
@@ -233,7 +310,7 @@ webhooks:
     - apiGroups:
         - capsule.clastix.io
       apiVersions:
-        - v1beta1
+        - v1beta2
       operations:
         - CREATE
         - UPDATE

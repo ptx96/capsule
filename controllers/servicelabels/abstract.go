@@ -8,68 +8,71 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	apierr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	capsulev1beta1 "github.com/clastix/capsule/api/v1beta1"
+	capsulev1beta2 "github.com/clastix/capsule/api/v1beta2"
+	"github.com/clastix/capsule/pkg/utils"
 )
 
 type abstractServiceLabelsReconciler struct {
 	obj    client.Object
 	client client.Client
 	log    logr.Logger
-	scheme *runtime.Scheme
-}
-
-func (r *abstractServiceLabelsReconciler) InjectClient(c client.Client) error {
-	r.client = c
-	return nil
 }
 
 func (r *abstractServiceLabelsReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	tenant, err := r.getTenant(ctx, request.NamespacedName, r.client)
 	if err != nil {
-		switch err.(type) {
-		case *NonTenantObject, *NoServicesMetadata:
+		noTenantObjError := &NonTenantObjectError{}
+		noSvcMetaError := &NoServicesMetadataError{}
+
+		if errors.As(err, &noTenantObjError) || errors.As(err, &noSvcMetaError) {
 			return reconcile.Result{}, nil
-		default:
-			r.log.Error(err, fmt.Sprintf("Cannot sync %t labels", r.obj))
-			return reconcile.Result{}, err
 		}
+
+		r.log.Error(err, fmt.Sprintf("Cannot sync %T %s/%s labels", r.obj, r.obj.GetNamespace(), r.obj.GetName()))
+
+		return reconcile.Result{}, err
 	}
 
 	err = r.client.Get(ctx, request.NamespacedName, r.obj)
 	if err != nil {
+		if apierr.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+
 		return reconcile.Result{}, err
 	}
 
 	_, err = controllerutil.CreateOrUpdate(ctx, r.client, r.obj, func() (err error) {
 		r.obj.SetLabels(r.sync(r.obj.GetLabels(), tenant.Spec.ServiceOptions.AdditionalMetadata.Labels))
 		r.obj.SetAnnotations(r.sync(r.obj.GetAnnotations(), tenant.Spec.ServiceOptions.AdditionalMetadata.Annotations))
+
 		return nil
 	})
 
 	return reconcile.Result{}, err
 }
 
-func (r *abstractServiceLabelsReconciler) getTenant(ctx context.Context, namespacedName types.NamespacedName, client client.Client) (*capsulev1beta1.Tenant, error) {
+func (r *abstractServiceLabelsReconciler) getTenant(ctx context.Context, namespacedName types.NamespacedName, client client.Client) (*capsulev1beta2.Tenant, error) {
 	ns := &corev1.Namespace{}
-	tenant := &capsulev1beta1.Tenant{}
+	tenant := &capsulev1beta2.Tenant{}
 
 	if err := client.Get(ctx, types.NamespacedName{Name: namespacedName.Namespace}, ns); err != nil {
 		return nil, err
 	}
 
-	capsuleLabel, _ := capsulev1beta1.GetTypeLabel(&capsulev1beta1.Tenant{})
+	capsuleLabel, _ := utils.GetTypeLabel(&capsulev1beta2.Tenant{})
 	if _, ok := ns.GetLabels()[capsuleLabel]; !ok {
 		return nil, NewNonTenantObject(namespacedName.Name)
 	}
@@ -97,32 +100,23 @@ func (r *abstractServiceLabelsReconciler) sync(available map[string]string, tena
 			}
 		}
 	}
+
 	return available
 }
 
-func (r *abstractServiceLabelsReconciler) forOptionPerInstanceName() builder.ForOption {
-	return builder.WithPredicates(predicate.Funcs{
-		CreateFunc: func(event event.CreateEvent) bool {
-			return r.IsNamespaceInTenant(event.Object.GetNamespace())
-		},
-		DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-			return r.IsNamespaceInTenant(deleteEvent.Object.GetNamespace())
-		},
-		UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-			return r.IsNamespaceInTenant(updateEvent.ObjectNew.GetNamespace())
-		},
-		GenericFunc: func(genericEvent event.GenericEvent) bool {
-			return r.IsNamespaceInTenant(genericEvent.Object.GetNamespace())
-		},
-	})
+func (r *abstractServiceLabelsReconciler) forOptionPerInstanceName(ctx context.Context) builder.ForOption {
+	return builder.WithPredicates(predicate.NewPredicateFuncs(func(object client.Object) bool {
+		return r.IsNamespaceInTenant(ctx, object.GetNamespace())
+	}))
 }
 
-func (r *abstractServiceLabelsReconciler) IsNamespaceInTenant(namespace string) bool {
-	tl := &capsulev1beta1.TenantList{}
-	if err := r.client.List(context.Background(), tl, client.MatchingFieldsSelector{
+func (r *abstractServiceLabelsReconciler) IsNamespaceInTenant(ctx context.Context, namespace string) bool {
+	tl := &capsulev1beta2.TenantList{}
+	if err := r.client.List(ctx, tl, client.MatchingFieldsSelector{
 		Selector: fields.OneTermEqualSelector(".status.namespaces", namespace),
 	}); err != nil {
 		return false
 	}
+
 	return len(tl.Items) > 0
 }

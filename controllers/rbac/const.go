@@ -23,7 +23,7 @@ var (
 				{
 					APIGroups: []string{""},
 					Resources: []string{"namespaces"},
-					Verbs:     []string{"create"},
+					Verbs:     []string{"create", "patch"},
 				},
 			},
 		},
@@ -48,7 +48,7 @@ var (
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     ProvisionerRoleName,
-			APIGroup: "rbac.authorization.k8s.io",
+			APIGroup: rbacv1.GroupName,
 		},
 	}
 )

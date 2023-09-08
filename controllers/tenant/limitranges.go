@@ -1,3 +1,6 @@
+// Copyright 2020-2021 Clastix Labs
+// SPDX-License-Identifier: Apache-2.0
+
 package tenant
 
 import (
@@ -10,11 +13,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	capsulev1beta1 "github.com/clastix/capsule/api/v1beta1"
+	capsulev1beta2 "github.com/clastix/capsule/api/v1beta2"
+	"github.com/clastix/capsule/pkg/utils"
 )
 
 // Ensuring all the LimitRange are applied to each Namespace handled by the Tenant.
-func (r *Manager) syncLimitRanges(tenant *capsulev1beta1.Tenant) error {
+func (r *Manager) syncLimitRanges(ctx context.Context, tenant *capsulev1beta2.Tenant) error { //nolint:dupl
 	// getting requested LimitRange keys
 	keys := make([]string, 0, len(tenant.Spec.LimitRanges.Items))
 
@@ -28,26 +32,27 @@ func (r *Manager) syncLimitRanges(tenant *capsulev1beta1.Tenant) error {
 		namespace := ns
 
 		group.Go(func() error {
-			return r.syncLimitRange(tenant, namespace, keys)
+			return r.syncLimitRange(ctx, tenant, namespace, keys)
 		})
 	}
 
 	return group.Wait()
 }
 
-func (r *Manager) syncLimitRange(tenant *capsulev1beta1.Tenant, namespace string, keys []string) (err error) {
+func (r *Manager) syncLimitRange(ctx context.Context, tenant *capsulev1beta2.Tenant, namespace string, keys []string) (err error) {
 	// getting LimitRange labels for the mutateFn
 	var tenantLabel, limitRangeLabel string
 
-	if tenantLabel, err = capsulev1beta1.GetTypeLabel(&capsulev1beta1.Tenant{}); err != nil {
-		return
-	}
-	if limitRangeLabel, err = capsulev1beta1.GetTypeLabel(&corev1.LimitRange{}); err != nil {
-		return
+	if tenantLabel, err = utils.GetTypeLabel(&capsulev1beta2.Tenant{}); err != nil {
+		return err
 	}
 
-	if err = r.pruningResources(namespace, keys, &corev1.LimitRange{}); err != nil {
-		return
+	if limitRangeLabel, err = utils.GetTypeLabel(&corev1.LimitRange{}); err != nil {
+		return err
+	}
+
+	if err = r.pruningResources(ctx, namespace, keys, &corev1.LimitRange{}); err != nil {
+		return err
 	}
 
 	for i, spec := range tenant.Spec.LimitRanges.Items {
@@ -59,22 +64,24 @@ func (r *Manager) syncLimitRange(tenant *capsulev1beta1.Tenant, namespace string
 		}
 
 		var res controllerutil.OperationResult
-		res, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, target, func() (err error) {
+		res, err = controllerutil.CreateOrUpdate(ctx, r.Client, target, func() (err error) {
 			target.ObjectMeta.Labels = map[string]string{
 				tenantLabel:     tenant.Name,
 				limitRangeLabel: strconv.Itoa(i),
 			}
 			target.Spec = spec
-			return controllerutil.SetControllerReference(tenant, target, r.Scheme)
+
+			return controllerutil.SetControllerReference(tenant, target, r.Client.Scheme())
 		})
 
 		r.emitEvent(tenant, target.GetNamespace(), res, fmt.Sprintf("Ensuring LimitRange %s", target.GetName()), err)
 
 		r.Log.Info("LimitRange sync result: "+string(res), "name", target.Name, "namespace", target.Namespace)
+
 		if err != nil {
-			return
+			return err
 		}
 	}
 
-	return
+	return nil
 }

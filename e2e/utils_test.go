@@ -1,4 +1,4 @@
-//+build e2e
+//go:build e2e
 
 // Copyright 2020-2021 Clastix Labs
 // SPDX-License-Identifier: Apache-2.0
@@ -7,19 +7,23 @@ package e2e
 
 import (
 	"context"
-	"strconv"
+	"fmt"
+	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/rand"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	versionUtil "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 
-	capsulev1alpha1 "github.com/clastix/capsule/api/v1alpha1"
-	capsulev1beta1 "github.com/clastix/capsule/api/v1beta1"
+	capsulev1beta2 "github.com/clastix/capsule/api/v1beta2"
 )
 
 const (
@@ -28,6 +32,10 @@ const (
 )
 
 func NewNamespace(name string) *corev1.Namespace {
+	if len(name) == 0 {
+		name = rand.String(10)
+	}
+
 	return &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -35,7 +43,7 @@ func NewNamespace(name string) *corev1.Namespace {
 	}
 }
 
-func NamespaceCreation(ns *corev1.Namespace, owner capsulev1beta1.OwnerSpec, timeout time.Duration) AsyncAssertion {
+func NamespaceCreation(ns *corev1.Namespace, owner capsulev1beta2.OwnerSpec, timeout time.Duration) AsyncAssertion {
 	cs := ownerClient(owner)
 	return Eventually(func() (err error) {
 		_, err = cs.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
@@ -43,60 +51,100 @@ func NamespaceCreation(ns *corev1.Namespace, owner capsulev1beta1.OwnerSpec, tim
 	}, timeout, defaultPollInterval)
 }
 
-func TenantNamespaceList(t *capsulev1beta1.Tenant, timeout time.Duration) AsyncAssertion {
+func TenantNamespaceList(t *capsulev1beta2.Tenant, timeout time.Duration) AsyncAssertion {
 	return Eventually(func() []string {
 		Expect(k8sClient.Get(context.TODO(), types.NamespacedName{Name: t.GetName()}, t)).Should(Succeed())
 		return t.Status.Namespaces
 	}, timeout, defaultPollInterval)
 }
 
+func ModifyNode(fn func(node *corev1.Node) error) error {
+	nodeList := &corev1.NodeList{}
+
+	Expect(k8sClient.List(context.Background(), nodeList)).ToNot(HaveOccurred())
+
+	return fn(&nodeList.Items[0])
+}
+
 func EventuallyCreation(f interface{}) AsyncAssertion {
 	return Eventually(f, defaultTimeoutInterval, defaultPollInterval)
 }
 
-func ModifyCapsuleConfigurationOpts(fn func(configuration *capsulev1alpha1.CapsuleConfiguration)) {
-	config := &capsulev1alpha1.CapsuleConfiguration{}
+func ModifyCapsuleConfigurationOpts(fn func(configuration *capsulev1beta2.CapsuleConfiguration)) {
+	config := &capsulev1beta2.CapsuleConfiguration{}
 	Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: "default"}, config)).ToNot(HaveOccurred())
 
 	fn(config)
 
 	Expect(k8sClient.Update(context.Background(), config)).ToNot(HaveOccurred())
 
-	time.Sleep(time.Second)
+	time.Sleep(1 * time.Second)
 }
 
-func KindInTenantRoleBindingAssertions(ns *corev1.Namespace, timeout time.Duration) (out []AsyncAssertion) {
-	for _, rbn := range tenantRoleBindingNames {
-		rb := &rbacv1.RoleBinding{}
-		out = append(out, Eventually(func() []string {
-			if err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: rbn, Namespace: ns.GetName()}, rb); err != nil {
-				return nil
-			}
-			var subjects []string
-			for _, subject := range rb.Subjects {
-				subjects = append(subjects, subject.Kind)
-			}
-			return subjects
-		}, timeout, defaultPollInterval))
+func CheckForOwnerRoleBindings(ns *corev1.Namespace, owner capsulev1beta2.OwnerSpec, roles map[string]bool) func() error {
+	if roles == nil {
+		roles = map[string]bool{
+			"admin":                     false,
+			"capsule-namespace-deleter": false,
+		}
 	}
-	return
+
+	return func() (err error) {
+		roleBindings := &rbacv1.RoleBindingList{}
+
+		if err = k8sClient.List(context.Background(), roleBindings, client.InNamespace(ns.GetName())); err != nil {
+			return fmt.Errorf("cannot retrieve list of rolebindings: %w", err)
+		}
+
+		var ownerName string
+
+		if owner.Kind == capsulev1beta2.ServiceAccountOwner {
+			parts := strings.Split(owner.Name, ":")
+
+			ownerName = parts[3]
+		} else {
+			ownerName = owner.Name
+		}
+
+		for _, roleBinding := range roleBindings.Items {
+			_, ok := roles[roleBinding.RoleRef.Name]
+			if !ok {
+				continue
+			}
+
+			subject := roleBinding.Subjects[0]
+
+			if subject.Name != ownerName {
+				continue
+			}
+
+			roles[roleBinding.RoleRef.Name] = true
+		}
+
+		for role, found := range roles {
+			if !found {
+				return fmt.Errorf("role %s for %s.%s has not been reconciled", role, owner.Kind.String(), owner.Name)
+			}
+		}
+
+		return nil
+	}
 }
 
-func GetKubernetesSemVer() (major, minor int, ver string) {
-	var v *version.Info
+func GetKubernetesVersion() *versionUtil.Version {
+	var serverVersion *version.Info
 	var err error
 	var cs kubernetes.Interface
+	var ver *versionUtil.Version
 
 	cs, err = kubernetes.NewForConfig(cfg)
 	Expect(err).ToNot(HaveOccurred())
 
-	v, err = cs.Discovery().ServerVersion()
+	serverVersion, err = cs.Discovery().ServerVersion()
 	Expect(err).ToNot(HaveOccurred())
-	major, err = strconv.Atoi(v.Major)
-	Expect(err).ToNot(HaveOccurred())
-	minor, err = strconv.Atoi(v.Minor)
-	Expect(err).ToNot(HaveOccurred())
-	ver = v.String()
 
-	return
+	ver, err = versionUtil.ParseGeneric(serverVersion.String())
+	Expect(err).ToNot(HaveOccurred())
+
+	return ver
 }

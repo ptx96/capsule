@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	capsulev1beta1 "github.com/clastix/capsule/api/v1beta1"
+	capsulev1beta2 "github.com/clastix/capsule/api/v1beta2"
 	capsulewebhook "github.com/clastix/capsule/pkg/webhook"
 	"github.com/clastix/capsule/pkg/webhook/utils"
 )
@@ -25,12 +25,12 @@ func ImagePullPolicy() capsulewebhook.Handler {
 
 func (r *imagePullPolicy) OnCreate(c client.Client, decoder *admission.Decoder, recorder record.EventRecorder) capsulewebhook.Func {
 	return func(ctx context.Context, req admission.Request) *admission.Response {
-		var pod = &corev1.Pod{}
+		pod := &corev1.Pod{}
 		if err := decoder.Decode(req, pod); err != nil {
 			return utils.ErroredResponse(err)
 		}
 
-		var tntList = &capsulev1beta1.TenantList{}
+		tntList := &capsulev1beta2.TenantList{}
 		if err := c.List(ctx, tntList, client.MatchingFieldsSelector{
 			Selector: fields.OneTermEqualSelector(".status.namespaces", pod.Namespace),
 		}); err != nil {

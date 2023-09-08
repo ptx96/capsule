@@ -5,7 +5,6 @@ package webhook
 
 import (
 	"context"
-	"io/ioutil"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/client-go/tools/record"
@@ -16,12 +15,6 @@ import (
 )
 
 func Register(manager controllerruntime.Manager, webhookList ...Webhook) error {
-	// skipping webhook setup if certificate is missing
-	certData, _ := ioutil.ReadFile("/tmp/k8s-webhook-server/serving-certs/tls.crt")
-	if len(certData) == 0 {
-		return nil
-	}
-
 	recorder := manager.GetEventRecorderFor("tenant-webhook")
 
 	server := manager.GetWebhookServer()
@@ -29,11 +22,14 @@ func Register(manager controllerruntime.Manager, webhookList ...Webhook) error {
 	for _, wh := range webhookList {
 		server.Register(wh.GetPath(), &webhook.Admission{
 			Handler: &handlerRouter{
+				client:   manager.GetClient(),
+				decoder:  admission.NewDecoder(manager.GetScheme()),
 				recorder: recorder,
 				handlers: wh.GetHandlers(),
 			},
 		})
 	}
+
 	return nil
 }
 
@@ -65,19 +61,9 @@ func (r *handlerRouter) Handle(ctx context.Context, req admission.Request) admis
 				return *response
 			}
 		}
+	case admissionv1.Connect:
+		return admission.Allowed("")
 	}
 
 	return admission.Allowed("")
-}
-
-func (r *handlerRouter) InjectClient(c client.Client) error {
-	r.client = c
-
-	return nil
-}
-
-func (r *handlerRouter) InjectDecoder(d *admission.Decoder) error {
-	r.decoder = d
-
-	return nil
 }

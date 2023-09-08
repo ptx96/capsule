@@ -1,3 +1,6 @@
+// Copyright 2020-2021 Clastix Labs
+// SPDX-License-Identifier: Apache-2.0
+
 package v1beta1
 
 import (
@@ -7,7 +10,7 @@ import (
 )
 
 func TestOwnerListSpec_FindOwner(t *testing.T) {
-	var bla = OwnerSpec{
+	bla := OwnerSpec{
 		Kind: UserOwner,
 		Name: "bla",
 		ProxyOperations: []ProxySettings{
@@ -17,7 +20,7 @@ func TestOwnerListSpec_FindOwner(t *testing.T) {
 			},
 		},
 	}
-	var bar = OwnerSpec{
+	bar := OwnerSpec{
 		Kind: GroupOwner,
 		Name: "bar",
 		ProxyOperations: []ProxySettings{
@@ -27,7 +30,7 @@ func TestOwnerListSpec_FindOwner(t *testing.T) {
 			},
 		},
 	}
-	var baz = OwnerSpec{
+	baz := OwnerSpec{
 		Kind: UserOwner,
 		Name: "baz",
 		ProxyOperations: []ProxySettings{
@@ -37,7 +40,7 @@ func TestOwnerListSpec_FindOwner(t *testing.T) {
 			},
 		},
 	}
-	var fim = OwnerSpec{
+	fim := OwnerSpec{
 		Kind: ServiceAccountOwner,
 		Name: "fim",
 		ProxyOperations: []ProxySettings{
@@ -47,7 +50,7 @@ func TestOwnerListSpec_FindOwner(t *testing.T) {
 			},
 		},
 	}
-	var bom = OwnerSpec{
+	bom := OwnerSpec{
 		Kind: GroupOwner,
 		Name: "bom",
 		ProxyOperations: []ProxySettings{
@@ -61,7 +64,7 @@ func TestOwnerListSpec_FindOwner(t *testing.T) {
 			},
 		},
 	}
-	var qip = OwnerSpec{
+	qip := OwnerSpec{
 		Kind: ServiceAccountOwner,
 		Name: "qip",
 		ProxyOperations: []ProxySettings{
@@ -71,7 +74,7 @@ func TestOwnerListSpec_FindOwner(t *testing.T) {
 			},
 		},
 	}
-	var owners = OwnerListSpec{bom, qip, bla, bar, baz, fim}
+	owners := OwnerListSpec{bom, qip, bla, bar, baz, fim}
 
 	assert.Equal(t, owners.FindOwner("bom", GroupOwner), bom)
 	assert.Equal(t, owners.FindOwner("qip", ServiceAccountOwner), qip)

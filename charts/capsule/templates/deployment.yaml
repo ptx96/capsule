@@ -1,7 +1,8 @@
+{{- if eq .Values.manager.kind "Deployment" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "capsule.deploymentName" . }}
+  name: {{ include "capsule.controllerName" . }}
   labels:
     {{- include "capsule.labels" . | nindent 4 }}
   {{- with .Values.customAnnotations }}
@@ -27,8 +28,13 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "capsule.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if .Values.manager.hostNetwork }}
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       {{- end }}
       priorityClassName: {{ .Values.priorityClassName }}
       {{- with .Values.nodeSelector }}
@@ -43,16 +49,21 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
         - name: cert
           secret:
             defaultMode: 420
-            secretName: {{ include "capsule.fullname" . }}-tls
+            secretName: {{ include "capsule.secretTlsName" . }}
       containers:
         - name: manager
           command:
           - /manager
           args:
+          - --webhook-port={{ .Values.manager.webhookPort }}
           - --enable-leader-election
           - --zap-log-level={{ default 4 .Values.manager.options.logLevel }}
           - --configuration-name=default
@@ -65,7 +76,7 @@ spec:
                 fieldPath: metadata.namespace
           ports:
             - name: webhook-server
-              containerPort: 9443
+              containerPort: {{ .Values.manager.webhookPort }}
               protocol: TCP
             - name: metrics
               containerPort: 8080
@@ -81,4 +92,5 @@ spec:
           resources:
             {{- toYaml .Values.manager.resources | nindent 12 }}
           securityContext:
-            allowPrivilegeEscalation: false
+            {{- toYaml .Values.securityContext | nindent 12 }}
+{{- end }}

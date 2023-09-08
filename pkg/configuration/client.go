@@ -8,27 +8,28 @@ import (
 	"regexp"
 
 	"github.com/pkg/errors"
-	machineryerr "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	capsulev1alpha1 "github.com/clastix/capsule/api/v1alpha1"
+	capsulev1beta2 "github.com/clastix/capsule/api/v1beta2"
+	capsuleapi "github.com/clastix/capsule/pkg/api"
 )
 
 // capsuleConfiguration is the Capsule Configuration retrieval mode
 // using a closure that provides the desired configuration.
 type capsuleConfiguration struct {
-	retrievalFn func() *capsulev1alpha1.CapsuleConfiguration
+	retrievalFn func() *capsulev1beta2.CapsuleConfiguration
 }
 
-func NewCapsuleConfiguration(client client.Client, name string) Configuration {
-	return &capsuleConfiguration{retrievalFn: func() *capsulev1alpha1.CapsuleConfiguration {
-		config := &capsulev1alpha1.CapsuleConfiguration{}
+func NewCapsuleConfiguration(ctx context.Context, client client.Client, name string) Configuration {
+	return &capsuleConfiguration{retrievalFn: func() *capsulev1beta2.CapsuleConfiguration {
+		config := &capsulev1beta2.CapsuleConfiguration{}
 
-		if err := client.Get(context.Background(), types.NamespacedName{Name: name}, config); err != nil {
-			if machineryerr.IsNotFound(err) {
-				return &capsulev1alpha1.CapsuleConfiguration{
-					Spec: capsulev1alpha1.CapsuleConfigurationSpec{
+		if err := client.Get(ctx, types.NamespacedName{Name: name}, config); err != nil {
+			if apierrors.IsNotFound(err) {
+				return &capsulev1beta2.CapsuleConfiguration{
+					Spec: capsulev1beta2.CapsuleConfigurationSpec{
 						UserGroups:                     []string{"capsule.clastix.io"},
 						ForceTenantPrefix:              false,
 						ProtectedNamespaceRegexpString: "",
@@ -42,11 +43,12 @@ func NewCapsuleConfiguration(client client.Client, name string) Configuration {
 	}}
 }
 
-func (c capsuleConfiguration) ProtectedNamespaceRegexp() (*regexp.Regexp, error) {
+func (c *capsuleConfiguration) ProtectedNamespaceRegexp() (*regexp.Regexp, error) {
 	expr := c.retrievalFn().Spec.ProtectedNamespaceRegexpString
 	if len(expr) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
+
 	r, err := regexp.Compile(expr)
 	if err != nil {
 		return nil, errors.Wrap(err, "Cannot compile the protected namespace regexp")
@@ -55,10 +57,46 @@ func (c capsuleConfiguration) ProtectedNamespaceRegexp() (*regexp.Regexp, error)
 	return r, nil
 }
 
-func (c capsuleConfiguration) ForceTenantPrefix() bool {
+func (c *capsuleConfiguration) ForceTenantPrefix() bool {
 	return c.retrievalFn().Spec.ForceTenantPrefix
 }
 
-func (c capsuleConfiguration) UserGroups() []string {
+func (c *capsuleConfiguration) TLSSecretName() (name string) {
+	return c.retrievalFn().Spec.CapsuleResources.TLSSecretName
+}
+
+func (c *capsuleConfiguration) EnableTLSConfiguration() bool {
+	return c.retrievalFn().Spec.EnableTLSReconciler
+}
+
+func (c *capsuleConfiguration) MutatingWebhookConfigurationName() (name string) {
+	return c.retrievalFn().Spec.CapsuleResources.MutatingWebhookConfigurationName
+}
+
+func (c *capsuleConfiguration) TenantCRDName() string {
+	return TenantCRDName
+}
+
+func (c *capsuleConfiguration) ValidatingWebhookConfigurationName() (name string) {
+	return c.retrievalFn().Spec.CapsuleResources.ValidatingWebhookConfigurationName
+}
+
+func (c *capsuleConfiguration) UserGroups() []string {
 	return c.retrievalFn().Spec.UserGroups
+}
+
+func (c *capsuleConfiguration) ForbiddenUserNodeLabels() *capsuleapi.ForbiddenListSpec {
+	if c.retrievalFn().Spec.NodeMetadata == nil {
+		return nil
+	}
+
+	return &c.retrievalFn().Spec.NodeMetadata.ForbiddenLabels
+}
+
+func (c *capsuleConfiguration) ForbiddenUserNodeAnnotations() *capsuleapi.ForbiddenListSpec {
+	if c.retrievalFn().Spec.NodeMetadata == nil {
+		return nil
+	}
+
+	return &c.retrievalFn().Spec.NodeMetadata.ForbiddenAnnotations
 }

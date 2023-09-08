@@ -16,6 +16,7 @@ import (
 
 func TestNewCertificateAuthorityFromBytes(t *testing.T) {
 	var ca *CapsuleCA
+
 	var err error
 
 	ca, err = GenerateCertificateAuthority()
@@ -37,6 +38,7 @@ func TestCapsuleCa_GenerateCertificate(t *testing.T) {
 	type testCase struct {
 		dnsNames []string
 	}
+
 	for name, c := range map[string]testCase{
 		"foo.tld": {[]string{"foo.tld"}},
 		"SAN":     {[]string{"capsule-webhook-service.capsule-system.svc", "capsule-webhook-service.capsule-system.default.cluster"}},
@@ -69,40 +71,6 @@ func TestCapsuleCa_GenerateCertificate(t *testing.T) {
 
 			_, err = tls.X509KeyPair(crt.Bytes(), key.Bytes())
 			assert.Nil(t, err)
-		})
-	}
-}
-
-func TestCapsuleCa_IsValid(t *testing.T) {
-	type testCase struct {
-		notBefore   time.Time
-		notAfter    time.Time
-		returnError bool
-	}
-	tc := map[string]testCase{
-		"ok":       {time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 0, 1), false},
-		"expired":  {time.Now().AddDate(1, 0, 0), time.Now(), true},
-		"notValid": {time.Now().AddDate(0, 0, 1), time.Now().AddDate(0, 0, 2), true},
-	}
-	for name, c := range tc {
-		t.Run(name, func(t *testing.T) {
-			var ca *CapsuleCA
-			var err error
-
-			ca, err = GenerateCertificateAuthority()
-			assert.Nil(t, err)
-
-			ca.certificate.NotAfter = c.notAfter
-			ca.certificate.NotBefore = c.notBefore
-
-			var w time.Duration
-			w, err = ca.ExpiresIn(time.Now())
-			if c.returnError {
-				assert.Error(t, err)
-				return
-			}
-			assert.Nil(t, err)
-			assert.WithinDuration(t, ca.certificate.NotAfter, time.Now().Add(w), time.Minute)
 		})
 	}
 }

@@ -1,3 +1,6 @@
+// Copyright 2020-2021 Clastix Labs
+// SPDX-License-Identifier: Apache-2.0
+
 package tenant
 
 import (
@@ -11,27 +14,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	capsulev1beta1 "github.com/clastix/capsule/api/v1beta1"
+	capsulev1beta2 "github.com/clastix/capsule/pkg/utils"
 )
 
 // pruningResources is taking care of removing the no more requested sub-resources as LimitRange, ResourceQuota or
 // NetworkPolicy using the "exists" and "notin" LabelSelector to perform an outer-join removal.
-func (r *Manager) pruningResources(ns string, keys []string, obj client.Object) (err error) {
+func (r *Manager) pruningResources(ctx context.Context, ns string, keys []string, obj client.Object) (err error) {
 	var capsuleLabel string
-	if capsuleLabel, err = capsulev1beta1.GetTypeLabel(obj); err != nil {
+
+	if capsuleLabel, err = capsulev1beta2.GetTypeLabel(obj); err != nil {
 		return
 	}
 
 	selector := labels.NewSelector()
 
 	var exists *labels.Requirement
+
 	if exists, err = labels.NewRequirement(capsuleLabel, selection.Exists, []string{}); err != nil {
 		return
 	}
+
 	selector = selector.Add(*exists)
 
 	if len(keys) > 0 {
 		var notIn *labels.Requirement
+
 		if notIn, err = labels.NewRequirement(capsuleLabel, selection.NotIn, keys); err != nil {
 			return err
 		}
@@ -42,7 +49,7 @@ func (r *Manager) pruningResources(ns string, keys []string, obj client.Object) 
 	r.Log.Info("Pruning objects with label selector " + selector.String())
 
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		return r.DeleteAllOf(context.TODO(), obj, &client.DeleteAllOfOptions{
+		return r.DeleteAllOf(ctx, obj, &client.DeleteAllOfOptions{
 			ListOptions: client.ListOptions{
 				LabelSelector: selector,
 				Namespace:     ns,
@@ -53,7 +60,8 @@ func (r *Manager) pruningResources(ns string, keys []string, obj client.Object) 
 }
 
 func (r *Manager) emitEvent(object runtime.Object, namespace string, res controllerutil.OperationResult, msg string, err error) {
-	var eventType = corev1.EventTypeNormal
+	eventType := corev1.EventTypeNormal
+
 	if err != nil {
 		eventType = corev1.EventTypeWarning
 		res = "Error"

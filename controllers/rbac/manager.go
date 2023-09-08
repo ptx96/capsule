@@ -10,20 +10,18 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	capsulev1alpha1 "github.com/clastix/capsule/api/v1alpha1"
+	capsulev1beta2 "github.com/clastix/capsule/api/v1beta2"
+	"github.com/clastix/capsule/controllers/utils"
 	"github.com/clastix/capsule/pkg/configuration"
 )
 
@@ -33,65 +31,33 @@ type Manager struct {
 	Configuration configuration.Configuration
 }
 
-// InjectClient injects the Client interface, required by the Runnable interface
-func (r *Manager) InjectClient(c client.Client) error {
-	r.Client = c
-	return nil
-}
+func (r *Manager) SetupWithManager(ctx context.Context, mgr ctrl.Manager, configurationName string) (err error) {
+	namesPredicate := utils.NamesMatchingPredicate(ProvisionerRoleName, DeleterRoleName)
 
-func (r *Manager) filterByNames(name string) bool {
-	return name == ProvisionerRoleName || name == DeleterRoleName
-}
-
-//nolint:dupl
-func (r *Manager) SetupWithManager(mgr ctrl.Manager, configurationName string) (err error) {
 	crErr := ctrl.NewControllerManagedBy(mgr).
-		For(&rbacv1.ClusterRole{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(event event.CreateEvent) bool {
-				return r.filterByNames(event.Object.GetName())
-			},
-			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-				return r.filterByNames(deleteEvent.Object.GetName())
-			},
-			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-				return r.filterByNames(updateEvent.ObjectNew.GetName())
-			},
-			GenericFunc: func(genericEvent event.GenericEvent) bool {
-				return r.filterByNames(genericEvent.Object.GetName())
-			},
-		})).
+		For(&rbacv1.ClusterRole{}, namesPredicate).
 		Complete(r)
 	if crErr != nil {
 		err = multierror.Append(err, crErr)
 	}
+
 	crbErr := ctrl.NewControllerManagedBy(mgr).
-		For(&rbacv1.ClusterRoleBinding{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(event event.CreateEvent) bool {
-				return r.filterByNames(event.Object.GetName())
-			},
-			DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-				return r.filterByNames(deleteEvent.Object.GetName())
-			},
-			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
-				return r.filterByNames(updateEvent.ObjectNew.GetName())
-			},
-			GenericFunc: func(genericEvent event.GenericEvent) bool {
-				return r.filterByNames(genericEvent.Object.GetName())
-			},
-		})).
-		Watches(source.NewKindWithCache(&capsulev1alpha1.CapsuleConfiguration{}, mgr.GetCache()), handler.Funcs{
-			UpdateFunc: func(updateEvent event.UpdateEvent, limitingInterface workqueue.RateLimitingInterface) {
+		For(&rbacv1.ClusterRoleBinding{}, namesPredicate).
+		Watches(&capsulev1beta2.CapsuleConfiguration{}, handler.Funcs{
+			UpdateFunc: func(ctx context.Context, updateEvent event.UpdateEvent, limitingInterface workqueue.RateLimitingInterface) {
 				if updateEvent.ObjectNew.GetName() == configurationName {
-					if crbErr := r.EnsureClusterRoleBindings(); crbErr != nil {
+					if crbErr := r.EnsureClusterRoleBindings(ctx); crbErr != nil {
 						r.Log.Error(err, "cannot update ClusterRoleBinding upon CapsuleConfiguration update")
 					}
 				}
 			},
 		}).
 		Complete(r)
+
 	if crbErr != nil {
 		err = multierror.Append(err, crbErr)
 	}
+
 	return
 }
 
@@ -100,18 +66,19 @@ func (r *Manager) SetupWithManager(mgr ctrl.Manager, configurationName string) (
 func (r *Manager) Reconcile(ctx context.Context, request reconcile.Request) (res reconcile.Result, err error) {
 	switch request.Name {
 	case ProvisionerRoleName:
-		if err = r.EnsureClusterRole(ProvisionerRoleName); err != nil {
+		if err = r.EnsureClusterRole(ctx, ProvisionerRoleName); err != nil {
 			r.Log.Error(err, "Reconciliation for ClusterRole failed", "ClusterRole", ProvisionerRoleName)
 
 			break
 		}
-		if err = r.EnsureClusterRoleBindings(); err != nil {
+
+		if err = r.EnsureClusterRoleBindings(ctx); err != nil {
 			r.Log.Error(err, "Reconciliation for ClusterRoleBindings failed")
 
 			break
 		}
 	case DeleterRoleName:
-		if err = r.EnsureClusterRole(DeleterRoleName); err != nil {
+		if err = r.EnsureClusterRole(ctx, DeleterRoleName); err != nil {
 			r.Log.Error(err, "Reconciliation for ClusterRole failed", "ClusterRole", DeleterRoleName)
 		}
 	}
@@ -119,14 +86,14 @@ func (r *Manager) Reconcile(ctx context.Context, request reconcile.Request) (res
 	return
 }
 
-func (r *Manager) EnsureClusterRoleBindings() (err error) {
+func (r *Manager) EnsureClusterRoleBindings(ctx context.Context) (err error) {
 	crb := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ProvisionerRoleName,
 		},
 	}
 
-	_, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, crb, func() (err error) {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, crb, func() (err error) {
 		crb.RoleRef = provisionerClusterRoleBinding.RoleRef
 
 		crb.Subjects = []rbacv1.Subject{}
@@ -144,7 +111,7 @@ func (r *Manager) EnsureClusterRoleBindings() (err error) {
 	return
 }
 
-func (r *Manager) EnsureClusterRole(roleName string) (err error) {
+func (r *Manager) EnsureClusterRole(ctx context.Context, roleName string) (err error) {
 	role, ok := clusterRoles[roleName]
 	if !ok {
 		return fmt.Errorf("clusterRole %s is not mapped", roleName)
@@ -156,8 +123,9 @@ func (r *Manager) EnsureClusterRole(roleName string) (err error) {
 		},
 	}
 
-	_, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, clusterRole, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, clusterRole, func() error {
 		clusterRole.Rules = role.Rules
+
 		return nil
 	})
 
@@ -170,8 +138,9 @@ func (r *Manager) EnsureClusterRole(roleName string) (err error) {
 func (r *Manager) Start(ctx context.Context) error {
 	for roleName := range clusterRoles {
 		r.Log.Info("setting up ClusterRoles", "ClusterRole", roleName)
-		if err := r.EnsureClusterRole(roleName); err != nil {
-			if errors.IsAlreadyExists(err) {
+
+		if err := r.EnsureClusterRole(ctx, roleName); err != nil {
+			if apierrors.IsAlreadyExists(err) {
 				continue
 			}
 
@@ -180,8 +149,9 @@ func (r *Manager) Start(ctx context.Context) error {
 	}
 
 	r.Log.Info("setting up ClusterRoleBindings")
-	if err := r.EnsureClusterRoleBindings(); err != nil {
-		if errors.IsAlreadyExists(err) {
+
+	if err := r.EnsureClusterRoleBindings(ctx); err != nil {
+		if apierrors.IsAlreadyExists(err) {
 			return nil
 		}
 

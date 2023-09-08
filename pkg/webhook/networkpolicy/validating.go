@@ -13,13 +13,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	capsulev1beta1 "github.com/clastix/capsule/api/v1beta1"
+	capsulev1beta2 "github.com/clastix/capsule/api/v1beta2"
+	capsuleutils "github.com/clastix/capsule/pkg/utils"
 	capsulewebhook "github.com/clastix/capsule/pkg/webhook"
 	"github.com/clastix/capsule/pkg/webhook/utils"
 )
 
-type handler struct {
-}
+type handler struct{}
 
 func Handler() capsulewebhook.Handler {
 	return &handler{}
@@ -31,17 +31,17 @@ func (r *handler) OnCreate(client.Client, *admission.Decoder, record.EventRecord
 	}
 }
 
-func (r *handler) generic(ctx context.Context, req admission.Request, client client.Client, _ *admission.Decoder) (*capsulev1beta1.Tenant, error) {
+func (r *handler) generic(ctx context.Context, req admission.Request, client client.Client, _ *admission.Decoder) (*capsulev1beta2.Tenant, error) {
 	var err error
+
 	np := &networkingv1.NetworkPolicy{}
-	err = client.Get(ctx, types.NamespacedName{Namespace: req.AdmissionRequest.Namespace, Name: req.AdmissionRequest.Name}, np)
-	if err != nil {
+	if err = client.Get(ctx, types.NamespacedName{Namespace: req.AdmissionRequest.Namespace, Name: req.AdmissionRequest.Name}, np); err != nil {
 		return nil, err
 	}
 
-	tnt := &capsulev1beta1.Tenant{}
+	tnt := &capsulev1beta2.Tenant{}
 
-	l, _ := capsulev1beta1.GetTypeLabel(&capsulev1beta1.Tenant{})
+	l, _ := capsuleutils.GetTypeLabel(&capsulev1beta2.Tenant{})
 	if v, ok := np.GetLabels()[l]; ok {
 		if err = client.Get(ctx, types.NamespacedName{Name: v}, tnt); err != nil {
 			return nil, err
@@ -50,7 +50,7 @@ func (r *handler) generic(ctx context.Context, req admission.Request, client cli
 		return tnt, nil
 	}
 
-	return nil, nil
+	return nil, nil //nolint:nilnil
 }
 
 //nolint:dupl
@@ -60,6 +60,7 @@ func (r *handler) OnDelete(client client.Client, decoder *admission.Decoder, rec
 		if err != nil {
 			return utils.ErroredResponse(err)
 		}
+
 		if tnt != nil {
 			recorder.Eventf(tnt, corev1.EventTypeWarning, "NetworkPolicyDeletion", "NetworkPolicy %s/%s cannot be deleted", req.Namespace, req.Name)
 
