@@ -1,7 +1,7 @@
-
 <p align="left">
   <img src="https://github.com/clastix/capsule/actions/workflows/ci.yml/badge.svg"/>
   <img src="https://img.shields.io/github/license/clastix/capsule"/>
+  [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fptx96%2Fcapsule.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fptx96%2Fcapsule?ref=badge_shield)
   <img src="https://img.shields.io/github/go-mod/go-version/clastix/capsule"/>
   <a href="https://github.com/clastix/capsule/releases">
     <img src="https://img.shields.io/github/v/release/clastix/capsule"/>
@@ -125,4 +125,10 @@ Please, refer to the [documentation page](https://capsule.clastix.io/docs/contri
 
 - Q. Do you provide commercial support?
 
-  A. Yes, we're available to help and provide commercial support. [Clastix](https://clastix.io) is the company behind Capsule. Please, contact us for a quote. 
+  A. Yes, we're available to help and provide commercial support. [Clastix](https://clastix.io) is the company behind Capsule. Please, contact us for a quote.
+ 
+- Q. What about licensing and dependencies?
+
+  A. Check out our FOSSA badge!
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fptx96%2Fcapsule.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fptx96%2Fcapsule?ref=badge_large)
